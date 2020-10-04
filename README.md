@@ -12,6 +12,14 @@ with limited boilerplate.
 Clap does construct a specification internally as arguments are parsed.
 It uses it to generate the `--help`, following usual man page conventions.
 
+## Installation
+
+Clap is available as an opam package:
+
+    opam install clap
+
+To use it, add `clap` as a dependency in your `dune` file.
+
 ## API Documentation
 
 See [src/clap.mli](src/clap.mli).
