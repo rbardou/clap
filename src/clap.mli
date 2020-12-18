@@ -380,11 +380,11 @@ val case: ?description: string -> string -> (unit -> 'a) -> 'a case
     the absence of an argument, not for an invalid argument. *)
 val default_case: ?description: string -> (unit -> 'a) -> 'a case
 
-(** An inhabited type denoting that a function never returns.
+(** An uninhabited type denoting that a function never returns.
 
     Used by [subcommand] callbacks to make sure that they exit
     or raise an exception, since there is no way to build a value
-    type [never_returns]. *)
+    of type [never_returns]. *)
 type never_returns
 
 (** Read a subcommand.
