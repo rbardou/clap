@@ -158,16 +158,21 @@ let init args =
       | '-' ->
           if len = 1 then
             [ Unnamed arg ]
-          else if arg.[1] == '-' then
-            [ Long (String.sub arg 2 (len - 2)) ]
-          else
-            let rec make acc i =
-              if i < 1 then
-                acc
-              else
-                make (Short arg.[i] :: acc) (i - 1)
-            in
-            make [] (len - 1)
+          else (
+            match arg.[1] with
+              | '-' ->
+                  [ Long (String.sub arg 2 (len - 2)) ]
+              | '0'..'9' ->
+                  [ Unnamed arg ]
+              | _ ->
+                  let rec make acc i =
+                    if i < 1 then
+                      acc
+                    else
+                      make (Short arg.[i] :: acc) (i - 1)
+                  in
+                  make [] (len - 1)
+          )
       | '\\' ->
           [ Unnamed (String.sub arg 1 (len - 1)) ]
       | _ ->

@@ -28,8 +28,9 @@
 
 (** On the command-line, there are several kinds of arguments:
 
-    - unnamed arguments, such as [depth] or [\--depth] or [\\depth],
+    - unnamed arguments, such as [depth] or [\--depth] or [\\depth] or [-123],
       which do not start with a dash, or are exactly a single dash,
+      or start with a dash followed by a digit,
       and if they start with a backslash,
       this backslash is removed (so [\--depth] means [--depth],
       which is unnamed even though without the backslash it starts
