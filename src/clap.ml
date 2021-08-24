@@ -526,7 +526,7 @@ struct
 
 end
 
-let help ?(out = prerr_string) ?(style = Sys.getenv "TERM" <> "dumb") () =
+let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") () =
   let spec_is_optional = function
     | Optional _ | Default _ | List _ | Flag _ -> true
     | Mandatory _ -> false
