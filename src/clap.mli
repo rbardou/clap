@@ -436,6 +436,31 @@ val flag:
   ?description: string ->
   bool -> bool
 
+(** Read an enum value using flags.
+
+    Usage: [flag cases default]
+
+    This is a generalized version of {!flag} for enums with more than 2 possible values.
+    [cases] is a list of [(long, short, value)] triplets.
+
+    If [last] is [false], find the first occurrence of [long]s and [short]s, consume it,
+    and return the corresponding [value].
+
+    If [last] is [true], consume all occurrences of all [long]s and [short]s
+    and return the [value] that corresponds to the last occurrence.
+
+    If no occurrence is found, return [default].
+
+    [compare] is used to find the name of the [default] value for [--help].
+    It defaults to [Stdlib.compare]. *)
+val flag_enum:
+  ?section: section ->
+  ?last: bool ->
+  ?compare: ('a -> 'a -> int) ->
+  ?description: string ->
+  (string list * char list * 'a) list ->
+  'a -> 'a
+
 (** {2 Subcommands} *)
 
 (** Subcommand cases. *)

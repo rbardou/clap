@@ -131,6 +131,17 @@ This can be either:
       ""
   in
 
+  (* [flag_enum] is a generalization of [flag] for enums with more than 2 possible values. *)
+  let color =
+    Clap.flag_enum
+      [
+        [ "red"; "redish" ], [ 'r' ], "red";
+        [ "orange" ], [], "orange";
+        [], [ 'y' ], "yellow";
+      ]
+      "red"
+  in
+
   (* Now that we defined some named arguments, let's define an unnamed argument,
      i.e. one with neither ~long nor ~short. It is best to specify the ~placeholder of those
      arguments, since "VALUE" is not very informative. *)
@@ -237,9 +248,10 @@ log_file = %S
 fast = %b
 verbose = %b
 url = %S
+color = %S
 username = %S
 %!" input (match output with None -> "N/A" | Some o -> o)
-    max_size min_size log_file fast verbose url username;
+    max_size min_size log_file fast verbose url color username;
 
   match command with
     | `copy (force, chunk_size) ->

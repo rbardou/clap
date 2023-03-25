@@ -22,6 +22,9 @@
 (* SOFTWARE.                                                                      *)
 (**********************************************************************************)
 
+module Char_map = Map.Make (Char)
+module String_map = Map.Make (String)
+
 let list_iter x f = List.iter f x
 let list_iteri x f = List.iteri f x
 
@@ -60,8 +63,6 @@ type 'a typ =
 
 let typ ~name ~dummy ~parse ~show =
   { type_name = name; dummy; parse; show }
-
-module String_map = Map.Make (String)
 
 let enum (type a) ?(compare: a -> a -> int = Stdlib.compare) name = function
   | [] ->
@@ -139,6 +140,13 @@ type spec =
       unset_short: char list;
       description: string option;
       default: bool;
+    } -> spec
+  | Flag_enum: {
+      last: bool;
+      compare: 'a -> 'a -> int;
+      description: string option;
+      cases: (string list * char list * 'a) list;
+      default: 'a;
     } -> spec
   | Subcommand: {
       cases: 'a case list;
@@ -438,6 +446,56 @@ let flag ?(section = options_section) ?(last = true)
         else
           assert false (* bug in [test] or [consume_in_place] *)
 
+let flag_enum ?(section = options_section) ?(last = true)
+    ?(compare = Stdlib.compare) ?description cases default =
+  section.section_specs_rev <-
+    Flag_enum { last; compare; description; cases; default }
+    :: section.section_specs_rev;
+  let longs =
+    let add acc (longs, _, value) =
+      List.fold_left (fun acc long -> String_map.add long value acc) acc longs
+    in
+    List.fold_left add String_map.empty cases
+  in
+  let shorts =
+    let add acc (_, shorts, value) =
+      List.fold_left (fun acc short -> Char_map.add short value acc) acc shorts
+    in
+    List.fold_left add Char_map.empty cases
+  in
+  let stop = ref false in
+  let test arg =
+    if !stop then Stop else
+      match arg with
+        | Long name when String_map.mem name longs ->
+            if not last then stop := true;
+            Take
+        | Short name when Char_map.mem name shorts ->
+            if not last then stop := true;
+            Take
+        | _ ->
+            Continue
+  in
+  match List.rev (consume_in_place test) with
+    | [] ->
+        default
+    | Unnamed _ :: _ ->
+        assert false (* bug in [test] or [consume_in_place] *)
+    | Long name :: _ -> (
+        match String_map.find_opt name longs with
+          | None ->
+              assert false (* bug in [test] or [consume_in_place] *)
+          | Some value ->
+              value
+      )
+    | Short name :: _ -> (
+        match Char_map.find_opt name shorts with
+          | None ->
+              assert false (* bug in [test] or [consume_in_place] *)
+          | Some value ->
+              value
+      )
+
 let case ?description command handler =
   {
     case_description = description;
@@ -582,14 +640,14 @@ end
 
 let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") () =
   let spec_is_optional = function
-    | Optional _ | Default _ | List _ | Flag _ -> true
+    | Optional _ | Default _ | List _ | Flag _ | Flag_enum _ -> true
     | Mandatory _ -> false
     | Subcommand { cases; _ } ->
         List.exists (function { case_command = None; _ } -> true | _ -> false) cases
   in
   let spec_is_list = function
     | List _ -> true
-    | Optional _ | Default _ | Flag _ | Mandatory _ | Subcommand _ -> false
+    | Optional _ | Default _ | Flag _ | Flag_enum _ | Mandatory _ | Subcommand _ -> false
   in
   let name_list long short =
     List.map (fun x -> "--" ^ x) long @
@@ -603,6 +661,8 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
     | List { parameter } -> names_of_parameter parameter
     | Flag { set_long; set_short; unset_long; unset_short; _ } ->
         name_list set_long set_short @ name_list unset_long unset_short
+    | Flag_enum { cases; _ } ->
+        List.flatten (List.map (fun (longs, shorts, _) -> name_list longs shorts) cases)
     | Subcommand _ -> []
   in
   let placeholder_of_spec = function
@@ -610,7 +670,7 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
     | Mandatory { parameter; _ } -> Some parameter.placeholder
     | Default { parameter; _ } -> Some parameter.placeholder
     | List { parameter } -> Some parameter.placeholder
-    | Flag _ -> None
+    | Flag _ | Flag_enum _ -> None
     | Subcommand { placeholder; _ } -> Some placeholder
   in
   let description_of_spec = function
@@ -619,6 +679,7 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
     | Default { parameter; _ } -> parameter.description
     | List { parameter } -> parameter.description
     | Flag { description; _ } -> description
+    | Flag_enum { description; _ } -> description
     | Subcommand _ -> None
   in
   let sections = List.rev !sections_rev in
@@ -721,6 +782,7 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
           rich_text description
   );
   (
+    (* Used for sorting only. *)
     let full_name_of_spec = function
       | Optional x ->
           full_name x.parameter
@@ -730,20 +792,30 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
           full_name x.parameter
       | List x ->
           full_name x.parameter
-      | Flag x ->
-          (
-            match x.set_long, x.set_short, x.unset_long, x.unset_short with
-              | [], [], [], [] ->
-                  "???"
-              | name :: _, _, _, _ ->
-                  "--" ^ name
-              | [], name :: _, _, _ ->
-                  "-" ^ String.make 1 name
-              | [], _, name :: _, _ ->
-                  "--" ^ name
-              | [], [], [], name :: _ ->
-                  "-" ^ String.make 1 name
-          )
+      | Flag x -> (
+          match x.set_long, x.set_short, x.unset_long, x.unset_short with
+            | [], [], [], [] ->
+                "???"
+            | name :: _, _, _, _ ->
+                "--" ^ name
+            | [], name :: _, _, _ ->
+                "-" ^ String.make 1 name
+            | [], _, name :: _, _ ->
+                "--" ^ name
+            | [], [], [], name :: _ ->
+                "-" ^ String.make 1 name
+        )
+      | Flag_enum x -> (
+          match x.cases with
+            | [] ->
+                "???"
+            | ([], [], _) :: _ ->
+                "???"
+            | (name :: _, _, _) :: _ ->
+                "--" ^ name
+            | (_, name :: _, _) :: _ ->
+                "-" ^ String.make 1 name
+        )
       | Subcommand x ->
           (* Unused since we put subcommands in their own section. *)
           x.placeholder
@@ -794,7 +866,7 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
                     ()
                 | Default { parameter; default; _ } ->
                     Text.word ("(default: " ^ parameter.typ.show default ^ ")")
-                | Flag { set_long; set_short; unset_long; unset_short; default; _ } ->
+                | Flag { set_long; set_short; unset_long; unset_short; default; _ } -> (
                     let long, short =
                       if default then set_long, set_short else unset_long, unset_short
                     in
@@ -805,6 +877,24 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
                           Text.word ("(default: --" ^ name ^ ")")
                       | [], name :: _ ->
                           Text.word ("(default: -" ^ String.make 1 name ^ ")")
+                  )
+                | Flag_enum { compare = cmp; cases; default; _ } ->
+                    let rec find_default = function
+                      | [] ->
+                          ()
+                      | (longs, shorts, value) :: tail ->
+                          if cmp value default = 0 then
+                            match longs, shorts with
+                              | [], [] ->
+                                  ()
+                              | name :: _, _ ->
+                                  Text.word ("(default: --" ^ name ^ ")")
+                              | _, name :: _ ->
+                                  Text.word ("(default: -" ^ String.make 1 name ^ ")")
+                          else
+                            find_default tail
+                    in
+                    find_default cases
             );
             (
               match description_of_spec spec with

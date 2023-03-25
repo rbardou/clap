@@ -7,6 +7,9 @@
 - Added support for synonyms: arguments can now have multiple equivalent names,
   not just at most one long and one short.
 
+- Added `flag_enum`, a generalization of `flag` for enums
+  with more than 2 possible values.
+
 ## Version 0.2.0
 
 - Fixed `Not_found` error when `TERM` is not set.
