@@ -4,6 +4,9 @@
 
 - Added support for custom sections in --help.
 
+- Added support for synonyms: arguments can now have multiple equivalent names,
+  not just at most one long and one short.
+
 ## Version 0.2.0
 
 - Fixed `Not_found` error when `TERM` is not set.

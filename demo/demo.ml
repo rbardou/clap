@@ -75,8 +75,15 @@ let () =
   let input = Clap.mandatory_string ~section: files ~long: "input" ~short: 'i' () in
 
   (* Here, output has type string option. If --output is specified,
-     it contains its value. If it is not, it contains None. *)
-  let output = Clap.optional_string ~section: files ~long: "output" () in
+     it contains its value. If it is not, it contains None.
+     --output has synonyms --out and --result which can be used in its place. *)
+  let output =
+    Clap.optional_string
+      ~section: files
+      ~long: "output"
+      ~long_synonyms: [ "out"; "result" ]
+      ()
+  in
 
   (* Here, max_size has type int. If --max-size is specified and is a valid integer,
      it contains its value. If --max-size is unspecified, max_size contains

@@ -41,12 +41,14 @@
     - short-named arguments, such as [-d], which start with a dash
       and which can be grouped together ([-abc] is the same as [-a -b -c]).
 
-    The functions below allow to specify argument names with [long] and [short].
-    If neither [long] nor [short] is given, the argument is unnamed.
-    If [long] is given, the argument can be given on the command-line
-    using the long name ["--" ^ long].
+    The functions below allow to specify argument names with,
+    [long], [long_synonyms], [short] and [short_synonyms].
+    If none is given, the argument is unnamed.
+    If [long] or [long_synonyms] are given, the argument can be given on the command-line
+    using the long name ["--" ^ long] for each [long] in [long :: long_synonyms].
     If [short] is given, the argument can be given on the command-line
-    using the short name (a dash followed by [short], possibly among others).
+    using the short name (a dash followed by [short] or one of [short_synonyms],
+    possibly among others).
 
     At the beginning of the execution of your program, [Sys.argv] is put
     in an internal list, called the list of remaining arguments.
@@ -191,7 +193,9 @@ val mandatory_string:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> string
@@ -201,7 +205,9 @@ val mandatory_int:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> int
@@ -211,7 +217,9 @@ val mandatory_float:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> float
@@ -222,7 +230,9 @@ val mandatory:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> 'a
@@ -238,7 +248,9 @@ val optional_string:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> string option
@@ -248,7 +260,9 @@ val optional_int:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> int option
@@ -258,7 +272,9 @@ val optional_float:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> float option
@@ -269,7 +285,9 @@ val optional:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> 'a option
@@ -284,7 +302,9 @@ val default_string:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   string -> string
@@ -294,7 +314,9 @@ val default_int:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   int -> int
@@ -304,7 +326,9 @@ val default_float:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   float -> float
@@ -315,7 +339,9 @@ val default:
   ?section: section ->
   ?last: bool ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   'a -> 'a
@@ -335,7 +361,9 @@ val default:
 val list_string:
   ?section: section ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> string list
@@ -344,7 +372,9 @@ val list_string:
 val list_int:
   ?section: section ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> int list
@@ -353,7 +383,9 @@ val list_int:
 val list_float:
   ?section: section ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> float list
@@ -363,7 +395,9 @@ val list:
   'a typ ->
   ?section: section ->
   ?long: string ->
+  ?long_synonyms: string list ->
   ?short: char ->
+  ?short_synonyms: char list ->
   ?placeholder: string ->
   ?description: string ->
   unit -> 'a list
@@ -374,24 +408,31 @@ val list:
 
     Usage: [flag default]
 
-    If [last] is [false], find the first occurrence of [set_long], [set_short],
-    [unset_long] or [unset_short] and consume it.
-    Return [true] if [set_long] or [set_short] was found,
-    [false] if [unset_long] or [unset_short] was found.
+    If [last] is [false], find the first occurrence of [set_long], [set_long_synonyms],
+    [set_short], [set_short_synonyms], [unset_long], [unset_long_synonyms],
+    [unset_short] or [unset_short_synonyms] and consume it.
+    Return [true] if [set_long], one of [set_long_synonyms],
+    [set_short] or one of [set_short_synonyms] was found.
+    Return [false] if [unset_long], one of [unset_long_synonyms],
+    [unset_short] or one of [unset_short_synonyms]  was found.
 
-    If [last] is [true] (which is the default), find all occurrences of
-    [set_long], [set_short], [unset_long] or [unset_short] and consume then.
-    Return [true] if [set_long] or [set_short] is the last occurrence,
-    [false] if [unset_long] or [unset_short] is the last occurrence.
+    If [last] is [true] (which is the default), find all occurrences of and consume then.
+    Return [true] if the last occurrence is [set_long], [set_short] or one of their
+    synonyms, [false] if [unset_long], [unset_short] or one of their synonyms
+    is the last occurrence.
 
     If no occurrence is found, return [default]. *)
 val flag:
   ?section: section ->
   ?last: bool ->
   ?set_long: string ->
+  ?set_long_synonyms: string list ->
   ?set_short: char ->
+  ?set_short_synonyms: char list ->
   ?unset_long: string ->
+  ?unset_long_synonyms: string list ->
   ?unset_short: char ->
+  ?unset_short_synonyms: char list ->
   ?description: string ->
   bool -> bool
 

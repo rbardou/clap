@@ -112,8 +112,8 @@ let float =
 
 type 'a parameter =
   {
-    long: string option;
-    short: char option;
+    long: string list;
+    short: char list;
     placeholder: string;
     description: string option;
     typ: 'a typ;
@@ -133,10 +133,10 @@ type spec =
   | List: { parameter: 'a parameter } -> spec
   | Flag: {
       last: bool;
-      set_long: string option;
-      set_short: char option;
-      unset_long: string option;
-      unset_short: char option;
+      set_long: string list;
+      set_short: char list;
+      unset_long: string list;
+      unset_short: char list;
       description: string option;
       default: bool;
     } -> spec
@@ -273,18 +273,18 @@ let consume_and_parse_parameter all (type a) (parameter: a parameter): a list =
   let test arg =
     if !stop then Stop else
       match arg with
-        | Unnamed _ when parameter.long = None && parameter.short = None ->
+        | Unnamed _ when parameter.long = [] && parameter.short = [] ->
             if not all then stop := true;
             Take
-        | Long name when parameter.long = Some name ->
+        | Long name when List.mem name parameter.long ->
             if not all then stop := true;
             Take_next
-        | Long _ when parameter.long = None && parameter.short = None ->
+        | Long _ when parameter.long = [] && parameter.short = [] ->
             Stop
-        | Short name when parameter.short = Some name ->
+        | Short name when List.mem name parameter.short ->
             if not all then stop := true;
             Take_next
-        | Short _ when parameter.long = None && parameter.short = None ->
+        | Short _ when parameter.long = [] && parameter.short = [] ->
             Stop
         | _ ->
             Continue
@@ -297,23 +297,32 @@ let get_last last parameter =
         last
     | None ->
         match parameter.long, parameter.short with
-          | None, None ->
+          | [], [] ->
               false
           | _ ->
               true
 
 let full_name parameter =
   match parameter.long, parameter.short with
-    | None, None ->
+    | [], [] ->
         parameter.placeholder
-    | Some long, _ ->
+    | long :: _, _ ->
         "--" ^ long ^ " " ^ parameter.placeholder
-    | None, Some short ->
+    | [], short :: _ ->
         "-" ^ String.make 1 short ^ " " ^ parameter.placeholder
 
-let optional (type a) (typ: a typ) ?(section = options_section) ?last ?long ?short
-    ?(placeholder = "VALUE") ?description (): a option =
-  let parameter = { long; short; placeholder; description; typ } in
+let make_parameter ?long ?(long_synonyms = []) ?short ?(short_synonyms = [])
+    ?(placeholder = "VALUE") ?description typ =
+  let long = match long with None -> long_synonyms | Some x -> x :: long_synonyms in
+  let short = match short with None -> short_synonyms | Some x -> x :: short_synonyms in
+  { long; short; placeholder; description; typ }
+
+let optional (type a) (typ: a typ) ?(section = options_section) ?last
+    ?long ?long_synonyms ?short ?short_synonyms
+    ?placeholder ?description (): a option =
+  let parameter =
+    make_parameter ?long ?long_synonyms ?short ?short_synonyms ?placeholder ?description typ
+  in
   let last = get_last last parameter in
   section.section_specs_rev <- Optional { last; parameter } :: section.section_specs_rev;
   match List.rev (consume_and_parse_parameter last parameter) with
@@ -326,9 +335,12 @@ let optional_string = optional string
 let optional_int = optional int
 let optional_float = optional float
 
-let mandatory (type a) (typ: a typ) ?(section = options_section) ?last ?long ?short
-    ?(placeholder = "VALUE") ?description (): a =
-  let parameter = { long; short; placeholder; description; typ } in
+let mandatory (type a) (typ: a typ) ?(section = options_section) ?last
+    ?long ?long_synonyms ?short ?short_synonyms
+    ?placeholder ?description (): a =
+  let parameter =
+    make_parameter ?long ?long_synonyms ?short ?short_synonyms ?placeholder ?description typ
+  in
   let last = get_last last parameter in
   section.section_specs_rev <- Mandatory { last; parameter } :: section.section_specs_rev;
   match List.rev (consume_and_parse_parameter last parameter) with
@@ -342,9 +354,12 @@ let mandatory_string = mandatory string
 let mandatory_int = mandatory int
 let mandatory_float = mandatory float
 
-let default (type a) (typ: a typ) ?(section = options_section) ?last ?long ?short
-    ?(placeholder = "VALUE") ?description default: a =
-  let parameter = { long; short; placeholder; description; typ } in
+let default (type a) (typ: a typ) ?(section = options_section) ?last
+    ?long ?long_synonyms ?short ?short_synonyms
+    ?placeholder ?description default: a =
+  let parameter =
+    make_parameter ?long ?long_synonyms ?short ?short_synonyms ?placeholder ?description typ
+  in
   let last = get_last last parameter in
   section.section_specs_rev <-
     Default { last; parameter; default } :: section.section_specs_rev;
@@ -358,9 +373,12 @@ let default_string = default string
 let default_int = default int
 let default_float = default float
 
-let list (type a) (typ: a typ) ?(section = options_section) ?long ?short
-    ?(placeholder = "VALUE") ?description (): a list =
-  let parameter = { long; short; placeholder; description; typ } in
+let list (type a) (typ: a typ) ?(section = options_section)
+    ?long ?long_synonyms ?short ?short_synonyms
+    ?placeholder ?description (): a list =
+  let parameter =
+    make_parameter ?long ?long_synonyms ?short ?short_synonyms ?placeholder ?description typ
+  in
   section.section_specs_rev <- List { parameter } :: section.section_specs_rev;
   consume_and_parse_parameter true parameter
 
@@ -368,8 +386,22 @@ let list_string = list string
 let list_int = list int
 let list_float = list float
 
-let flag ?(section = options_section) ?(last = true) ?set_long ?set_short
-    ?unset_long ?unset_short ?description default =
+let flag ?(section = options_section) ?(last = true)
+    ?set_long ?(set_long_synonyms = []) ?set_short ?(set_short_synonyms = [])
+    ?unset_long ?(unset_long_synonyms = []) ?unset_short ?(unset_short_synonyms = [])
+    ?description default =
+  let set_long =
+    match set_long with None -> set_long_synonyms | Some x -> x :: set_long_synonyms
+  in
+  let set_short =
+    match set_short with None -> set_short_synonyms | Some x -> x :: set_short_synonyms
+  in
+  let unset_long =
+    match unset_long with None -> unset_long_synonyms | Some x -> x :: unset_long_synonyms
+  in
+  let unset_short =
+    match unset_short with None -> unset_short_synonyms | Some x -> x :: unset_short_synonyms
+  in
   section.section_specs_rev <-
     Flag { last; set_long; set_short; unset_long; unset_short; description; default }
     :: section.section_specs_rev;
@@ -377,10 +409,10 @@ let flag ?(section = options_section) ?(last = true) ?set_long ?set_short
   let test arg =
     if !stop then Stop else
       match arg with
-        | Long name when set_long = Some name || unset_long = Some name ->
+        | Long name when List.mem name set_long || List.mem name unset_long ->
             if not last then stop := true;
             Take
-        | Short name when set_short = Some name || unset_short = Some name ->
+        | Short name when List.mem name set_short || List.mem name unset_short ->
             if not last then stop := true;
             Take
         | _ ->
@@ -392,16 +424,16 @@ let flag ?(section = options_section) ?(last = true) ?set_long ?set_short
     | Unnamed _ :: _ ->
         assert false (* bug in [test] or [consume_in_place] *)
     | Long name :: _ ->
-        if set_long = Some name then
+        if List.mem name set_long then
           true
-        else if unset_long = Some name then
+        else if List.mem name unset_long then
           false
         else
           assert false (* bug in [test] or [consume_in_place] *)
     | Short name :: _ ->
-        if set_short = Some name then
+        if List.mem name set_short then
           true
-        else if unset_short = Some name then
+        else if List.mem name unset_short then
           false
         else
           assert false (* bug in [test] or [consume_in_place] *)
@@ -559,18 +591,18 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
     | List _ -> true
     | Optional _ | Default _ | Flag _ | Mandatory _ | Subcommand _ -> false
   in
-  let name_pair long short =
-    (match long with None -> [] | Some x -> [ "--" ^ x ]) @
-    (match short with None -> [] | Some x -> [ "-" ^ String.make 1 x ])
+  let name_list long short =
+    List.map (fun x -> "--" ^ x) long @
+    List.map (fun x -> "-" ^ String.make 1 x) short
   in
-  let names_of_parameter { long; short; _ } = name_pair long short in
+  let names_of_parameter { long; short; _ } = name_list long short in
   let names_of_spec = function
     | Optional { parameter; _ } -> names_of_parameter parameter
     | Mandatory { parameter; _ } -> names_of_parameter parameter
     | Default { parameter; _ } -> names_of_parameter parameter
     | List { parameter } -> names_of_parameter parameter
     | Flag { set_long; set_short; unset_long; unset_short; _ } ->
-        name_pair set_long set_short @ name_pair unset_long unset_short
+        name_list set_long set_short @ name_list unset_long unset_short
     | Subcommand _ -> []
   in
   let placeholder_of_spec = function
@@ -701,15 +733,15 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
       | Flag x ->
           (
             match x.set_long, x.set_short, x.unset_long, x.unset_short with
-              | None, None, None, None ->
+              | [], [], [], [] ->
                   "???"
-              | Some name, _, _, _ ->
+              | name :: _, _, _, _ ->
                   "--" ^ name
-              | None, Some name, _, _ ->
+              | [], name :: _, _, _ ->
                   "-" ^ String.make 1 name
-              | None, _, Some name, _ ->
+              | [], _, name :: _, _ ->
                   "--" ^ name
-              | None, None, None, Some name ->
+              | [], [], [], name :: _ ->
                   "-" ^ String.make 1 name
           )
       | Subcommand x ->
@@ -767,11 +799,11 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
                       if default then set_long, set_short else unset_long, unset_short
                     in
                     match long, short with
-                      | None, None ->
+                      | [], [] ->
                           ()
-                      | Some name, _ ->
+                      | name :: _, _ ->
                           Text.word ("(default: --" ^ name ^ ")")
-                      | None, Some name ->
+                      | [], name :: _ ->
                           Text.word ("(default: -" ^ String.make 1 name ^ ")")
             );
             (
@@ -843,7 +875,7 @@ type never_returns = unit
 let subcommand (type a) ?on_help ?on_error ?(placeholder = "COMMAND")
     (cases: a case list): a =
   let parameter =
-    { long = None; short = None; placeholder; description = None; typ = string }
+    { long = []; short = []; placeholder; description = None; typ = string }
   in
   match List.rev (consume_and_parse_parameter false parameter) with
     | [] ->
