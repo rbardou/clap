@@ -73,13 +73,33 @@
     Contrary to Git though, global options will be allowed after the
     subcommand name. *)
 
-(** {2 Description} *)
+(** {2 Sections} *)
 
 (** Set the contents of the DESCRIPTION section of [--help].
 
     If you use [subcommand]s, this description is used when no [subcommand]
     has been selected. Otherwise, the description of the selected [case] is used. *)
 val description: string -> unit
+
+(** Sections for [--help]. *)
+type section
+
+(** Declare a new section.
+
+    Usage: [section title]
+
+    Default [description] is empty.
+
+    This creates a new section.
+    If its [description] is not empty or if some arguments were assigned to it
+    using [~section], it will be shown as [title] in [--help], with the description
+    and the list of arguments for this section.
+
+    Sections are shown in order of declaration. *)
+val section: ?description: string -> string -> section
+
+(** Default section for argument specifications (OPTIONS). *)
+val options_section: section
 
 (** {2 Custom Types} *)
 
@@ -168,39 +188,43 @@ val float: float typ
 
 (** Read a mandatory string argument. *)
 val mandatory_string:
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> string
 
 (** Read a mandatory integer argument. *)
 val mandatory_int:
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> int
 
 (** Read a mandatory float argument. *)
 val mandatory_float:
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> float
 
 (** Read a mandatory argument of a custom type. *)
 val mandatory:
   'a typ ->
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> 'a
 
 (** {2 Optional Arguments} *)
@@ -211,39 +235,43 @@ val mandatory:
 
 (** Read an optional string argument. *)
 val optional_string:
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> string option
 
 (** Read an optional integer argument. *)
 val optional_int:
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> int option
 
 (** Read an optional float argument. *)
 val optional_float:
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> float option
 
 (** Read an optional argument of a custom type. *)
 val optional:
   'a typ ->
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> 'a option
 
 (** {2 Optional Arguments With Default Values} *)
@@ -253,39 +281,43 @@ val optional:
 
 (** Read an optional string argument with a default value. *)
 val default_string:
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   string -> string
 
 (** Read an optional integer argument with a default value. *)
 val default_int:
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   int -> int
 
 (** Read an optional float argument with a default value. *)
 val default_float:
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   float -> float
 
 (** Read an optional argument of a custom type with a default value. *)
 val default:
   'a typ ->
+  ?section: section ->
   ?last: bool ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   'a -> 'a
 
 (** {2 Lists of Arguments} *)
@@ -301,35 +333,39 @@ val default:
 
 (** Read repeated string arguments. *)
 val list_string:
+  ?section: section ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> string list
 
 (** Read repeated integer arguments. *)
 val list_int:
+  ?section: section ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> int list
 
 (** Read repeated float arguments. *)
 val list_float:
+  ?section: section ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> float list
 
 (** Read repeated arguments of a custom type. *)
 val list:
   'a typ ->
+  ?section: section ->
   ?long: string ->
   ?short: char ->
-  ?description: string ->
   ?placeholder: string ->
+  ?description: string ->
   unit -> 'a list
 
 (** {2 Flags} *)
@@ -350,6 +386,7 @@ val list:
 
     If no occurrence is found, return [default]. *)
 val flag:
+  ?section: section ->
   ?last: bool ->
   ?set_long: string ->
   ?set_short: char ->

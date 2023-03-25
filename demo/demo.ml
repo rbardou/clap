@@ -35,6 +35,27 @@ let () =
   (* You can write a small introduction for the --help. *)
   Clap.description "Demo program for Clap.";
 
+  (* You can define custom sections where to put argument specifications in --help. *)
+  let files = Clap.section "FILES" in
+
+  (* Sections can have descriptions.
+     They do not have to contain argument specifications. *)
+  let _ =
+    Clap.section
+      ~description: "This is an example of custom section with a description."
+      "EXAMPLE SECTION"
+  in
+
+  (* Sections can have both descriptions and argument specifications. *)
+  let sizes =
+    Clap.section
+      ~description: "This is an example of custom section with a description and arguments."
+      "SIZES"
+  in
+
+  (* Sections can be specific to subcommands. *)
+  let copy_section = Clap.section "COPY OPTIONS" in
+
   (* We now define all named arguments.
      This is the first rule of Clap: define named arguments before unnamed ones.
      Clap works by consuming arguments: once they have been read, they are no longer
@@ -51,22 +72,23 @@ let () =
      argument. Unless the argument does not exist, in which case input contains
      the empty string. This is why you are not supposed to use input yet:
      wait until Clap.close. *)
-  let input = Clap.mandatory_string ~long: "input" ~short: 'i' () in
+  let input = Clap.mandatory_string ~section: files ~long: "input" ~short: 'i' () in
 
   (* Here, output has type string option. If --output is specified,
      it contains its value. If it is not, it contains None. *)
-  let output = Clap.optional_string ~long: "output" () in
+  let output = Clap.optional_string ~section: files ~long: "output" () in
 
   (* Here, max_size has type int. If --max-size is specified and is a valid integer,
      it contains its value. If --max-size is unspecified, max_size contains
      the default value 42. If --max-size is specified but is an invalid integer,
      max_size contains 0. Just like input, you should not use max_size for now:
      wait until Clap.close. *)
-  let max_size = Clap.default_int ~long: "max-size" 42 in
+  let max_size = Clap.default_int ~section: sizes ~long: "max-size" 42 in
 
   (* You can also give a description to your argument, for the --help. *)
   let min_size =
     Clap.default_int
+      ~section: sizes
       ~long: "min-size"
       ~description: "Minimum size of the output file."
       0
@@ -120,10 +142,12 @@ This can be either:
            it cannot appear before the command itself. But we do need to
            consume the named arguments which are specific to "copy" before we
            parse the unnamed arguments which are specific to "copy". *)
-        let force = Clap.flag ~set_short: 'f' false in
+        let force = Clap.flag ~section: copy_section ~set_short: 'f' false in
 
         (* Let's expect a mandatory argument, for good measure. *)
-        let chunk_size = Clap.mandatory_int ~placeholder: "CHUNK_SIZE" () in
+        let chunk_size =
+          Clap.mandatory_int ~section: copy_section ~placeholder: "CHUNK_SIZE" ()
+        in
 
         (* Here we have two choices. We can either call Clap.close and run the command,
            or we can return a value that denotes the command and its arguments

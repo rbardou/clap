@@ -146,8 +146,27 @@ type spec =
       value: string option;
     } -> spec
 
-(* Store specs for help, in reverse order. *)
-let specs: spec list ref = ref []
+type section =
+  {
+    section_name: string;
+    section_description: string;
+    mutable section_specs_rev: spec list;
+  }
+
+let sections_rev: section list ref = ref []
+
+let section ?(description = "") section_name =
+  let section =
+    {
+      section_name;
+      section_description = description;
+      section_specs_rev = [];
+    }
+  in
+  sections_rev := section :: !sections_rev;
+  section
+
+let options_section = section "OPTIONS"
 
 let init args =
   let parse arg =
@@ -179,9 +198,9 @@ let init args =
           [ Unnamed arg ]
   in
   remaining := List.flatten (List.map parse args);
-  global_description := None;
-  first_error := None;
-  specs := []
+  options_section.section_specs_rev <- [];
+  sections_rev := [ options_section ];
+  first_error := None
 
 let () =
   Sys.argv
@@ -292,11 +311,11 @@ let full_name parameter =
     | None, Some short ->
         "-" ^ String.make 1 short ^ " " ^ parameter.placeholder
 
-let optional (type a) (typ: a typ) ?last ?long ?short ?description ?(placeholder = "VALUE")
-    (): a option =
+let optional (type a) (typ: a typ) ?(section = options_section) ?last ?long ?short
+    ?(placeholder = "VALUE") ?description (): a option =
   let parameter = { long; short; placeholder; description; typ } in
   let last = get_last last parameter in
-  specs := Optional { last; parameter } :: !specs;
+  section.section_specs_rev <- Optional { last; parameter } :: section.section_specs_rev;
   match List.rev (consume_and_parse_parameter last parameter) with
     | [] ->
         None
@@ -307,11 +326,11 @@ let optional_string = optional string
 let optional_int = optional int
 let optional_float = optional float
 
-let mandatory (type a) (typ: a typ) ?last ?long ?short ?description ?(placeholder = "VALUE")
-    (): a =
+let mandatory (type a) (typ: a typ) ?(section = options_section) ?last ?long ?short
+    ?(placeholder = "VALUE") ?description (): a =
   let parameter = { long; short; placeholder; description; typ } in
   let last = get_last last parameter in
-  specs := Mandatory { last; parameter } :: !specs;
+  section.section_specs_rev <- Mandatory { last; parameter } :: section.section_specs_rev;
   match List.rev (consume_and_parse_parameter last parameter) with
     | [] ->
         error ("missing argument " ^ full_name parameter);
@@ -323,11 +342,12 @@ let mandatory_string = mandatory string
 let mandatory_int = mandatory int
 let mandatory_float = mandatory float
 
-let default (type a) (typ: a typ) ?last ?long ?short ?description ?(placeholder = "VALUE")
-    default: a =
+let default (type a) (typ: a typ) ?(section = options_section) ?last ?long ?short
+    ?(placeholder = "VALUE") ?description default: a =
   let parameter = { long; short; placeholder; description; typ } in
   let last = get_last last parameter in
-  specs := Default { last; parameter; default } :: !specs;
+  section.section_specs_rev <-
+    Default { last; parameter; default } :: section.section_specs_rev;
   match List.rev (consume_and_parse_parameter last parameter) with
     | [] ->
         default
@@ -338,19 +358,21 @@ let default_string = default string
 let default_int = default int
 let default_float = default float
 
-let list (type a) (typ: a typ) ?long ?short ?description ?(placeholder = "VALUE") (): a list =
+let list (type a) (typ: a typ) ?(section = options_section) ?long ?short
+    ?(placeholder = "VALUE") ?description (): a list =
   let parameter = { long; short; placeholder; description; typ } in
-  specs := List { parameter } :: !specs;
+  section.section_specs_rev <- List { parameter } :: section.section_specs_rev;
   consume_and_parse_parameter true parameter
 
 let list_string = list string
 let list_int = list int
 let list_float = list float
 
-let flag ?(last = true) ?set_long ?set_short ?unset_long ?unset_short ?description default =
-  specs :=
+let flag ?(section = options_section) ?(last = true) ?set_long ?set_short
+    ?unset_long ?unset_short ?description default =
+  section.section_specs_rev <-
     Flag { last; set_long; set_short; unset_long; unset_short; description; default }
-    :: !specs;
+    :: section.section_specs_rev;
   let stop = ref false in
   let test arg =
     if !stop then Stop else
@@ -567,7 +589,11 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
     | Flag { description; _ } -> description
     | Subcommand _ -> None
   in
-  let specs = List.rev !specs in
+  let sections = List.rev !sections_rev in
+  let all_specs =
+    List.map (fun sec -> List.rev sec.section_specs_rev) sections
+    |> List.flatten
+  in
   let bold = "\027[1m" in
   let module Output =
   struct
@@ -598,7 +624,7 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
     section "SYNOPSIS" @@ fun () ->
     Text.word (Filename.basename Sys.executable_name);
     Text.with_indentation 4 @@ fun () ->
-    list_iter specs @@ fun spec ->
+    list_iter all_specs @@ fun spec ->
     match spec with
       | Subcommand { value = Some name; _ } ->
           (* Commands which are already specified are replaced by their value. *)
@@ -645,7 +671,7 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
         | _ :: tail ->
             find_subcommand_with_value acc tail
       in
-      match find_subcommand_with_value None specs with
+      match find_subcommand_with_value None all_specs with
         | Some _ as x ->
             x
         | None ->
@@ -663,7 +689,6 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
           rich_text description
   );
   (
-    section "OPTIONS" @@ fun () ->
     let full_name_of_spec = function
       | Optional x ->
           full_name x.parameter
@@ -692,68 +717,73 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
           x.placeholder
     in
     let by_full_name a b = String.compare (full_name_of_spec a) (full_name_of_spec b) in
-    list_iter (List.sort by_full_name specs) @@ fun spec ->
-    match spec with
-      | Subcommand _ ->
-          (* Subcommands are described in their own section. *)
-          ()
-      | _ ->
-          let names = names_of_spec spec in
-          let placeholder = placeholder_of_spec spec in
-          let name_count = List.length names in
-          Text.paragraph ();
-          (
-            match names with
-              | [] ->
-                  (* Unnamed argument. *)
-                  Text.word (
-                    match placeholder with
-                      | None -> "???"
-                      | Some name -> name
-                  )
-              | _ ->
-                  (
-                    list_iteri names @@ fun i name ->
+    list_iter sections @@ fun sec ->
+    if sec.section_description <> "" || sec.section_specs_rev <> [] then
+      section sec.section_name @@ fun () ->
+      rich_text sec.section_description;
+      let section_specs = List.rev sec.section_specs_rev in
+      list_iter (List.sort by_full_name section_specs) @@ fun spec ->
+      match spec with
+        | Subcommand _ ->
+            (* Subcommands are described in their own section. *)
+            ()
+        | _ ->
+            let names = names_of_spec spec in
+            let placeholder = placeholder_of_spec spec in
+            let name_count = List.length names in
+            Text.paragraph ();
+            (
+              match names with
+                | [] ->
+                    (* Unnamed argument. *)
                     Text.word (
-                      name ^
-                      (
-                        match placeholder with
-                          | None -> ""
-                          | Some pname -> " " ^ pname
-                      ) ^
-                      (if i < name_count - 1 then "," else "")
+                      match placeholder with
+                        | None -> "???"
+                        | Some name -> name
                     )
-                  )
-          );
-          (
-            (* Show default value, if any. *)
-            match spec with
-              | Optional _ | Mandatory _ | List _ | Subcommand _ ->
-                  ()
-              | Default { parameter; default; _ } ->
-                  Text.word ("(default: " ^ parameter.typ.show default ^ ")")
-              | Flag { set_long; set_short; unset_long; unset_short; default; _ } ->
-                  let long, short =
-                    if default then set_long, set_short else unset_long, unset_short
-                  in
-                  match long, short with
-                    | None, None ->
-                        ()
-                    | Some name, _ ->
-                        Text.word ("(default: --" ^ name ^ ")")
-                    | None, Some name ->
-                        Text.word ("(default: -" ^ String.make 1 name ^ ")")
-          );
-          (
-            match description_of_spec spec with
-              | None ->
-                  ()
-              | Some description ->
-                  Text.new_line ();
-                  Text.with_indentation 4 @@ fun () ->
-                  rich_text description
-          );
-          Text.paragraph ()
+                | _ ->
+                    (
+                      list_iteri names @@ fun i name ->
+                      Text.word (
+                        name ^
+                        (
+                          match placeholder with
+                            | None -> ""
+                            | Some pname -> " " ^ pname
+                        ) ^
+                        (if i < name_count - 1 then "," else "")
+                      )
+                    )
+            );
+            (
+              (* Show default value, if any. *)
+              match spec with
+                | Optional _ | Mandatory _ | List _ | Subcommand _ ->
+                    ()
+                | Default { parameter; default; _ } ->
+                    Text.word ("(default: " ^ parameter.typ.show default ^ ")")
+                | Flag { set_long; set_short; unset_long; unset_short; default; _ } ->
+                    let long, short =
+                      if default then set_long, set_short else unset_long, unset_short
+                    in
+                    match long, short with
+                      | None, None ->
+                          ()
+                      | Some name, _ ->
+                          Text.word ("(default: --" ^ name ^ ")")
+                      | None, Some name ->
+                          Text.word ("(default: -" ^ String.make 1 name ^ ")")
+            );
+            (
+              match description_of_spec spec with
+                | None ->
+                    ()
+                | Some description ->
+                    Text.new_line ();
+                    Text.with_indentation 4 @@ fun () ->
+                    rich_text description
+            );
+            Text.paragraph ()
   );
   (
     let rec find_subcommand_without_value = function
@@ -779,7 +809,7 @@ let help ?(out = prerr_string) ?(style = Sys.getenv_opt "TERM" <> Some "dumb") (
       | _ :: tail ->
           find_subcommand_without_value tail
     in
-    find_subcommand_without_value specs
+    find_subcommand_without_value all_specs
   );
   ()
 
@@ -817,7 +847,9 @@ let subcommand (type a) ?on_help ?on_error ?(placeholder = "COMMAND")
   in
   match List.rev (consume_and_parse_parameter false parameter) with
     | [] ->
-        specs := Subcommand { cases; placeholder; value = None } :: !specs;
+        options_section.section_specs_rev <-
+          Subcommand { cases; placeholder; value = None }
+          :: options_section.section_specs_rev;
         (
           match
             List.find_opt
@@ -838,10 +870,14 @@ let subcommand (type a) ?on_help ?on_error ?(placeholder = "COMMAND")
             cases
         with
           | None ->
-              specs := Subcommand { cases; placeholder; value = None } :: !specs;
+              options_section.section_specs_rev <-
+                Subcommand { cases; placeholder; value = None }
+                :: options_section.section_specs_rev;
               error ("invalid command: " ^ head);
               close ?on_help ?on_error ();
               assert false (* since there is an error, [close] does not return *)
           | Some case ->
-              specs := Subcommand { cases; placeholder; value = Some head } :: !specs;
+              options_section.section_specs_rev <-
+                Subcommand { cases; placeholder; value = Some head }
+                :: options_section.section_specs_rev;
               case.case_handler ()
