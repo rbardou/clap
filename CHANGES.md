@@ -1,6 +1,6 @@
 # Changelog
 
-## Development Version
+## Version 0.3.0
 
 - Added support for custom sections in --help.
 
